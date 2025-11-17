@@ -14,6 +14,7 @@ const Hero = ({ onUploadClick }) => {
   const targetAngles = useRef({ pitch: 0, yaw: 0 })
   const currentAngles = useRef({ pitch: 0, yaw: 0 })
   const rafRef = useRef(0)
+  const hasPointerMoved = useRef(false)
 
   const handleLoad = (spline) => {
     splineRef.current = spline
@@ -31,30 +32,38 @@ const Hero = ({ onUploadClick }) => {
     const maxYaw = 0.6
     const maxPitch = 0.4
 
-    // Track across the entire viewport (site width/height), not just the hero box
-    const onMouseMove = (e) => {
+    // Compute angles from full viewport for a larger tracking zone
+    const computeAngles = (clientX, clientY) => {
       const vw = window.innerWidth || 1
       const vh = window.innerHeight || 1
       const cx = vw / 2
       const cy = vh / 2
-      const dx = (e.clientX - cx) / vw // ~ -0.5 .. 0.5 across full viewport
-      const dy = (e.clientY - cy) / vh
-
-      // Desired angles (radians)
+      const dx = (clientX - cx) / vw
+      const dy = (clientY - cy) / vh
       const yaw = clamp(dx * 2 * maxYaw, -maxYaw, maxYaw)
       const pitch = clamp(-dy * 2 * maxPitch, -maxPitch, maxPitch)
+      return { pitch, yaw }
+    }
+
+    const onPointerMove = (e) => {
+      const { pitch, yaw } = computeAngles(e.clientX, e.clientY)
       targetAngles.current = { pitch, yaw }
+      if (!hasPointerMoved.current) {
+        // Snap to the first target instantly to remove any perceived delay
+        currentAngles.current = { pitch, yaw }
+        hasPointerMoved.current = true
+      }
     }
 
     const onPointerLeave = () => {
-      // Ease back to neutral when the cursor leaves the window
       targetAngles.current = { pitch: 0, yaw: 0 }
+      hasPointerMoved.current = false
     }
 
     const animate = () => {
       const target = targetRef.current
       if (target) {
-        const ease = 0.15 // higher = snappier, lower = smoother
+        const ease = 0.28 // increase for snappier response (was 0.15)
         currentAngles.current = {
           pitch: lerp(currentAngles.current.pitch, targetAngles.current.pitch, ease),
           yaw: lerp(currentAngles.current.yaw, targetAngles.current.yaw, ease),
@@ -65,12 +74,19 @@ const Hero = ({ onUploadClick }) => {
       rafRef.current = requestAnimationFrame(animate)
     }
 
-    window.addEventListener('mousemove', onMouseMove)
+    // Use pointer events (covers mouse, pen, some touch) and can be coalesced by the browser
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerleave', onPointerLeave)
+    // Fallbacks for older environments
+    window.addEventListener('mousemove', onPointerMove, { passive: true })
     window.addEventListener('mouseleave', onPointerLeave)
+
     rafRef.current = requestAnimationFrame(animate)
 
     return () => {
-      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerleave', onPointerLeave)
+      window.removeEventListener('mousemove', onPointerMove)
       window.removeEventListener('mouseleave', onPointerLeave)
       cancelAnimationFrame(rafRef.current)
     }
