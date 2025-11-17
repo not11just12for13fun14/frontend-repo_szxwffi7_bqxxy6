@@ -31,13 +31,14 @@ const Hero = ({ onUploadClick }) => {
     const maxYaw = 0.6
     const maxPitch = 0.4
 
+    // Track across the entire viewport (site width/height), not just the hero box
     const onMouseMove = (e) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const cx = rect.left + rect.width / 2
-      const cy = rect.top + rect.height / 2
-      const dx = (e.clientX - cx) / rect.width // ~ -0.5 .. 0.5
-      const dy = (e.clientY - cy) / rect.height
+      const vw = window.innerWidth || 1
+      const vh = window.innerHeight || 1
+      const cx = vw / 2
+      const cy = vh / 2
+      const dx = (e.clientX - cx) / vw // ~ -0.5 .. 0.5 across full viewport
+      const dy = (e.clientY - cy) / vh
 
       // Desired angles (radians)
       const yaw = clamp(dx * 2 * maxYaw, -maxYaw, maxYaw)
@@ -46,7 +47,7 @@ const Hero = ({ onUploadClick }) => {
     }
 
     const onPointerLeave = () => {
-      // Ease back to neutral when the cursor leaves
+      // Ease back to neutral when the cursor leaves the window
       targetAngles.current = { pitch: 0, yaw: 0 }
     }
 
