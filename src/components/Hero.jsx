@@ -1,12 +1,55 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion } from 'framer-motion'
 
 const Hero = ({ onUploadClick }) => {
+  const splineRef = useRef(null)
+  const targetRef = useRef(null)
+  const containerRef = useRef(null)
+
+  const handleLoad = (spline) => {
+    splineRef.current = spline
+    // Try a few likely node names from the Spline scene
+    const candidates = ['Head', 'Robot', 'Avatar', 'Character', 'Face']
+    let found = null
+    for (const name of candidates) {
+      const obj = spline.findObjectByName?.(name)
+      if (obj) { found = obj; break }
+    }
+    targetRef.current = found
+  }
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const cx = rect.left + rect.width / 2
+      const cy = rect.top + rect.height / 2
+      const dx = (e.clientX - cx) / rect.width // -0.5 .. 0.5
+      const dy = (e.clientY - cy) / rect.height // -0.5 .. 0.5
+
+      const target = targetRef.current
+      if (!target) return
+
+      // Convert cursor delta into subtle head rotations (radians)
+      const maxYaw = 0.5 // left-right
+      const maxPitch = 0.35 // up-down
+      const yaw = Math.max(-maxYaw, Math.min(maxYaw, dx * 2 * maxYaw))
+      const pitch = Math.max(-maxPitch, Math.min(maxPitch, -dy * 2 * maxPitch))
+
+      // Preserve roll (z) if any
+      const roll = target.rotation?.z ?? 0
+      target.rotation = { x: pitch, y: yaw, z: roll }
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [])
+
   return (
-    <div className="relative min-h-[80vh] w-full overflow-hidden bg-gradient-to-b from-white to-gray-50">
+    <div ref={containerRef} className="relative min-h-[80vh] w-full overflow-hidden bg-gradient-to-b from-white to-gray-50">
       <div className="absolute inset-0">
-        <Spline scene="https://prod.spline.design/OG17yM2eUIs8MUmA/scene.splinecode" style={{ width: '100%', height: '100%' }} />
+        <Spline onLoad={handleLoad} scene="https://prod.spline.design/OG17yM2eUIs8MUmA/scene.splinecode" style={{ width: '100%', height: '100%' }} />
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-6 pt-16 pb-24 grid lg:grid-cols-2 gap-10">
