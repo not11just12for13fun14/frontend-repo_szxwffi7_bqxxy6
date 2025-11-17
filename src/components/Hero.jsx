@@ -15,6 +15,7 @@ const Hero = ({ onUploadClick }) => {
   const currentAngles = useRef({ pitch: 0, yaw: 0 })
   const rafRef = useRef(0)
   const hasPointerMoved = useRef(false)
+  const isActive = useRef(false) // track active drag for touch/pen
 
   const handleLoad = (spline) => {
     splineRef.current = spline
@@ -45,25 +46,51 @@ const Hero = ({ onUploadClick }) => {
       return { pitch, yaw }
     }
 
-    const onPointerMove = (e) => {
-      const { pitch, yaw } = computeAngles(e.clientX, e.clientY)
+    const updateAngles = (x, y, instant = false) => {
+      const { pitch, yaw } = computeAngles(x, y)
       targetAngles.current = { pitch, yaw }
-      if (!hasPointerMoved.current) {
-        // Snap to the first target instantly to remove any perceived delay
+      if (instant || !hasPointerMoved.current) {
         currentAngles.current = { pitch, yaw }
         hasPointerMoved.current = true
       }
     }
 
-    const onPointerLeave = () => {
+    const onPointerDown = (e) => {
+      isActive.current = true
+      updateAngles(e.clientX, e.clientY, true)
+    }
+
+    const onPointerMove = (e) => {
+      // For mouse, always track; for touch/pen, track only when active to avoid scroll conflicts
+      if (e.pointerType === 'mouse' || isActive.current) {
+        updateAngles(e.clientX, e.clientY)
+      }
+    }
+
+    const resetToNeutral = () => {
       targetAngles.current = { pitch: 0, yaw: 0 }
       hasPointerMoved.current = false
+    }
+
+    const onPointerUp = () => {
+      isActive.current = false
+      resetToNeutral()
+    }
+
+    const onPointerCancel = () => {
+      isActive.current = false
+      resetToNeutral()
+    }
+
+    const onPointerLeave = () => {
+      // If mouse leaves viewport, smoothly return to neutral
+      if (!isActive.current) resetToNeutral()
     }
 
     const animate = () => {
       const target = targetRef.current
       if (target) {
-        const ease = 0.28 // increase for snappier response (was 0.15)
+        const ease = 0.28 // snappy but smooth
         currentAngles.current = {
           pitch: lerp(currentAngles.current.pitch, targetAngles.current.pitch, ease),
           yaw: lerp(currentAngles.current.yaw, targetAngles.current.yaw, ease),
@@ -74,9 +101,13 @@ const Hero = ({ onUploadClick }) => {
       rafRef.current = requestAnimationFrame(animate)
     }
 
-    // Use pointer events (covers mouse, pen, some touch) and can be coalesced by the browser
+    // Pointer events cover mouse, touch, pen
+    window.addEventListener('pointerdown', onPointerDown, { passive: true })
     window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp, { passive: true })
+    window.addEventListener('pointercancel', onPointerCancel)
     window.addEventListener('pointerleave', onPointerLeave)
+
     // Fallbacks for older environments
     window.addEventListener('mousemove', onPointerMove, { passive: true })
     window.addEventListener('mouseleave', onPointerLeave)
@@ -84,7 +115,10 @@ const Hero = ({ onUploadClick }) => {
     rafRef.current = requestAnimationFrame(animate)
 
     return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerCancel)
       window.removeEventListener('pointerleave', onPointerLeave)
       window.removeEventListener('mousemove', onPointerMove)
       window.removeEventListener('mouseleave', onPointerLeave)
@@ -93,7 +127,7 @@ const Hero = ({ onUploadClick }) => {
   }, [])
 
   return (
-    <div ref={containerRef} className="relative min-h-[80vh] w-full overflow-hidden bg-gradient-to-b from-white to-gray-50">
+    <div ref={containerRef} className="relative min-h-[80vh] w-full overflow-hidden bg-gradient-to-b from-white to-gray-50 touch-none">
       <div className="absolute inset-0">
         <Spline onLoad={handleLoad} scene="https://prod.spline.design/OG17yM2eUIs8MUmA/scene.splinecode" style={{ width: '100%', height: '100%' }} />
       </div>
@@ -108,7 +142,7 @@ const Hero = ({ onUploadClick }) => {
           >
             <span className="inline-flex items-center gap-2 rounded-full bg-gray-900 text-white px-3 py-1 text-xs font-semibold w-fit">
               <span className="h-2 w-2 rounded-full bg-lime-400 animate-pulse" />
-              Interactive 3D — move your mouse
+              Interactive 3D — move your mouse or drag
             </span>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-gray-900">
               Compliance, but make it fun
