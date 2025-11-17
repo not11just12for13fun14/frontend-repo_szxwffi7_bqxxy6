@@ -90,7 +90,7 @@ const Hero = ({ onUploadClick }) => {
     const animate = () => {
       const target = targetRef.current
       if (target) {
-        const ease = 0.28 // snappy but smooth
+        const ease = 0.4 // snappier response (previously 0.28)
         currentAngles.current = {
           pitch: lerp(currentAngles.current.pitch, targetAngles.current.pitch, ease),
           yaw: lerp(currentAngles.current.yaw, targetAngles.current.yaw, ease),
