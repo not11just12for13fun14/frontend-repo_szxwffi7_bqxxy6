@@ -2,10 +2,18 @@ import React, { useEffect, useRef } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion } from 'framer-motion'
 
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+const lerp = (a, b, t) => a + (b - a) * t
+
 const Hero = ({ onUploadClick }) => {
   const splineRef = useRef(null)
   const targetRef = useRef(null)
   const containerRef = useRef(null)
+
+  // Smooth animation state
+  const targetAngles = useRef({ pitch: 0, yaw: 0 })
+  const currentAngles = useRef({ pitch: 0, yaw: 0 })
+  const rafRef = useRef(0)
 
   const handleLoad = (spline) => {
     splineRef.current = spline
@@ -20,30 +28,51 @@ const Hero = ({ onUploadClick }) => {
   }
 
   useEffect(() => {
+    const maxYaw = 0.6
+    const maxPitch = 0.4
+
     const onMouseMove = (e) => {
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const cx = rect.left + rect.width / 2
       const cy = rect.top + rect.height / 2
-      const dx = (e.clientX - cx) / rect.width // -0.5 .. 0.5
-      const dy = (e.clientY - cy) / rect.height // -0.5 .. 0.5
+      const dx = (e.clientX - cx) / rect.width // ~ -0.5 .. 0.5
+      const dy = (e.clientY - cy) / rect.height
 
+      // Desired angles (radians)
+      const yaw = clamp(dx * 2 * maxYaw, -maxYaw, maxYaw)
+      const pitch = clamp(-dy * 2 * maxPitch, -maxPitch, maxPitch)
+      targetAngles.current = { pitch, yaw }
+    }
+
+    const onPointerLeave = () => {
+      // Ease back to neutral when the cursor leaves
+      targetAngles.current = { pitch: 0, yaw: 0 }
+    }
+
+    const animate = () => {
       const target = targetRef.current
-      if (!target) return
-
-      // Convert cursor delta into subtle head rotations (radians)
-      const maxYaw = 0.5 // left-right
-      const maxPitch = 0.35 // up-down
-      const yaw = Math.max(-maxYaw, Math.min(maxYaw, dx * 2 * maxYaw))
-      const pitch = Math.max(-maxPitch, Math.min(maxPitch, -dy * 2 * maxPitch))
-
-      // Preserve roll (z) if any
-      const roll = target.rotation?.z ?? 0
-      target.rotation = { x: pitch, y: yaw, z: roll }
+      if (target) {
+        const ease = 0.15 // higher = snappier, lower = smoother
+        currentAngles.current = {
+          pitch: lerp(currentAngles.current.pitch, targetAngles.current.pitch, ease),
+          yaw: lerp(currentAngles.current.yaw, targetAngles.current.yaw, ease),
+        }
+        const roll = target.rotation?.z ?? 0
+        target.rotation = { x: currentAngles.current.pitch, y: currentAngles.current.yaw, z: roll }
+      }
+      rafRef.current = requestAnimationFrame(animate)
     }
 
     window.addEventListener('mousemove', onMouseMove)
-    return () => window.removeEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseleave', onPointerLeave)
+    rafRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseleave', onPointerLeave)
+      cancelAnimationFrame(rafRef.current)
+    }
   }, [])
 
   return (
